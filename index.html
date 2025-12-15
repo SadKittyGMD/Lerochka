@@ -24,17 +24,17 @@
     }
 
     /* Heart */
-    .heart {
+    .heart{
       position: relative;
       width: 120px;
       height: 110px;
       transform: rotate(-45deg);
       background: #ff4d6d;
       animation: beat 1.2s ease-in-out infinite;
+      will-change: transform, box-shadow;
     }
-
     .heart::before,
-    .heart::after {
+    .heart::after{
       content: "";
       position: absolute;
       width: 120px;
@@ -42,21 +42,31 @@
       background: #ff4d6d;
       border-radius: 50%;
     }
+    .heart::before{ top: -60px; left: 0; }
+    .heart::after { left: 60px; top: 0; }
 
-    .heart::before {
-      top: -60px;
-      left: 0;
-    }
-
-    .heart::after {
-      left: 60px;
-      top: 0;
-    }
-
+    /* base beat */
     @keyframes beat{
-      0%, 100% { transform: rotate(-45deg) scale(1.00); }
-      35%      { transform: rotate(-45deg) scale(1.10); }
-      70%      { transform: rotate(-45deg) scale(1.02); }
+      0%, 100% { transform: rotate(-45deg) scale(1); }
+      50%      { transform: rotate(-45deg) scale(1.08); }
+    }
+
+    /* tap pulse */
+    .heart.pulse { animation: tapBeat 0.35s ease-out; }
+
+    @keyframes tapBeat {
+      0% {
+        transform: rotate(-45deg) scale(1);
+        box-shadow: 0 0 0 rgba(255, 77, 109, 0.0);
+      }
+      50% {
+        transform: rotate(-45deg) scale(1.25);
+        box-shadow: 0 0 40px rgba(255, 77, 109, 0.8);
+      }
+      100% {
+        transform: rotate(-45deg) scale(1);
+        box-shadow: 0 0 0 rgba(255, 77, 109, 0.0);
+      }
     }
 
     .hint{
@@ -147,19 +157,26 @@
     function bpmToMs(bpmVal){
       return Math.max(280, Math.min(2000, Math.round(60000 / bpmVal)));
     }
+
     function apply(){
       heart.style.animationDuration = bpmToMs(bpm) + "ms";
       bpmLabel.textContent = "bpm: " + Math.round(bpm);
     }
 
+    function pulseOnce(){
+      heart.classList.remove("pulse");
+      void heart.offsetWidth; // перезапуск анимации
+      heart.classList.add("pulse");
+    }
+
     function startHold(){
       targetBpm = MAX_BPM;
       if (!msg.classList.contains('show')) {
-        // показать текст через чуть-чуть (чтобы было “вау”)
         clearTimeout(revealTimer);
         revealTimer = setTimeout(() => msg.classList.add('show'), 550);
       }
     }
+
     function endHold(){
       targetBpm = BASE_BPM;
       clearTimeout(revealTimer);
@@ -173,17 +190,28 @@
     }
     apply(); tick();
 
-    // touch + mouse
-    zone.addEventListener('touchstart', (e) => { e.preventDefault(); startHold(); }, {passive:false});
+    // touch + mouse (тап-пульс + удержание)
+    zone.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      pulseOnce();
+      startHold();
+    }, {passive:false});
+
     zone.addEventListener('touchend', endHold);
     zone.addEventListener('touchcancel', endHold);
-    zone.addEventListener('mousedown', startHold);
+
+    zone.addEventListener('mousedown', () => {
+      pulseOnce();
+      startHold();
+    });
+
     window.addEventListener('mouseup', endHold);
 
     // ===== Background particles (light) =====
     const c = document.getElementById('c');
     const ctx = c.getContext('2d');
     let w,h,parts;
+
     function resize(){
       w = c.width = window.innerWidth * devicePixelRatio;
       h = c.height = window.innerHeight * devicePixelRatio;
@@ -216,4 +244,6 @@
   </script>
 </body>
 </html>
+
+
 

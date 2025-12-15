@@ -21,9 +21,9 @@
       place-items: center;
       padding: 24px;
       text-align: center;
+      touch-action: none; /* важно: чтобы удержание не превращалось в жесты */
     }
 
-    /* Heart shell (rotation + base beat lives here) */
     .heart{
       width: 120px;
       height: 110px;
@@ -33,8 +33,6 @@
       display: grid;
       place-items: center;
     }
-
-    /* Heart actual shape lives here */
     .heart-inner{
       position: relative;
       width: 120px;
@@ -59,7 +57,6 @@
       50%      { transform: rotate(-45deg) scale(1.08); }
     }
 
-    /* pulse glow on each beat (triggered by JS repeatedly while holding) */
     .heart-inner.pulse{
       animation: tapBeat 0.28s ease-out;
     }
@@ -69,12 +66,7 @@
       100% { transform: scale(1);    box-shadow: 0 0 0 rgba(255,77,109,0); }
     }
 
-    .hint{
-      margin-top: 26px;
-      font-size: 14px;
-      opacity: .78;
-      letter-spacing: .2px;
-    }
+    .hint{ margin-top: 26px; font-size: 14px; opacity: .78; letter-spacing: .2px; }
     .text{
       margin-top: 14px;
       font-size: 18px;
@@ -142,8 +134,8 @@
   </div>
 
   <script>
-    const heart = document.getElementById('heart');            // beat speed
-    const heartInner = document.getElementById('heartInner');  // glow pulse
+    const heart = document.getElementById('heart');
+    const heartInner = document.getElementById('heartInner');
     const zone  = document.getElementById('tapZone');
     const msg   = document.getElementById('msg');
     const bpmLabel = document.getElementById('bpmLabel');
@@ -151,20 +143,25 @@
     const BASE_BPM = 72;
     const MAX_BPM  = 160;
 
-    // "feel" tuning
-    const RISE_SPEED = 0.018;   // медленнее растёт
-    const FALL_SPEED = 0.030;   // быстрее падает
-    const MAX_STEP_PER_FRAME = 1.8; // ограничение скачка bpm за кадр
+    // плавность
+    const RISE_SPEED = 0.016;     // медленнее вверх
+    const FALL_SPEED = 0.028;     // быстрее вниз
+    const MAX_STEP_PER_FRAME = 1.4;
+
+    // защита от "пулемёта"
+    const MIN_PULSE_INTERVAL_MS = 420; // <- вот это гасит “9999 bpm” визуально
 
     let targetBpm = BASE_BPM;
     let bpm = BASE_BPM;
-    let revealTimer = null;
 
     let holding = false;
-    let beatTimer = null;       // отвечает за повторный glow во время удержания
+    let beatTimer = null;
+    let revealTimer = null;
+    let activePointerId = null;
 
     function bpmToMs(bpmVal){
-      return Math.max(280, Math.min(2000, Math.round(60000 / bpmVal)));
+      const safe = Number.isFinite(bpmVal) ? bpmVal : BASE_BPM;
+      return Math.max(280, Math.min(2000, Math.round(60000 / safe)));
     }
 
     function apply(){
@@ -174,7 +171,7 @@
 
     function pulseOnce(){
       heartInner.classList.remove('pulse');
-      void heartInner.offsetWidth; // restart animation
+      void heartInner.offsetWidth;
       heartInner.classList.add('pulse');
     }
 
@@ -182,8 +179,10 @@
       clearTimeout(beatTimer);
       if (!holding) return;
 
-      // пусть glow случается чуть-чуть раньше середины "удара", чтобы выглядело живее
-      const interval = bpmToMs(bpm) * 0.92;
+      let interval = bpmToMs(bpm) * 0.92;
+      if (!Number.isFinite(interval)) interval = 800;
+
+      interval = Math.max(MIN_PULSE_INTERVAL_MS, interval);
 
       beatTimer = setTimeout(() => {
         pulseOnce();
@@ -202,8 +201,8 @@
         revealTimer = setTimeout(() => msg.classList.add('show'), 550);
       }
 
-      pulseOnce();          // сразу "удар"
-      scheduleNextPulse();  // и дальше бьётся пока держим
+      pulseOnce();
+      scheduleNextPulse();
     }
 
     function endHold(){
@@ -219,25 +218,37 @@
       const diff = targetBpm - bpm;
       const speed = diff > 0 ? RISE_SPEED : FALL_SPEED;
 
-      // экспоненциальное приближение + лимит шага (чтобы не дёргалось)
       let delta = diff * speed;
       delta = Math.max(-MAX_STEP_PER_FRAME, Math.min(MAX_STEP_PER_FRAME, delta));
 
       bpm += delta;
       apply();
+
       requestAnimationFrame(tick);
     }
 
     apply();
     tick();
 
-    // Touch + mouse
-    zone.addEventListener('touchstart', (e) => { e.preventDefault(); startHold(); }, {passive:false});
-    zone.addEventListener('touchend', endHold);
-    zone.addEventListener('touchcancel', endHold);
+    // === Pointer events (без двойных touch+mouse) ===
+    zone.addEventListener('pointerdown', (e) => {
+      if (activePointerId !== null) return; // уже держим другим пальцем/мышью
+      activePointerId = e.pointerId;
+      zone.setPointerCapture?.(e.pointerId);
+      startHold();
+    });
 
-    zone.addEventListener('mousedown', startHold);
-    window.addEventListener('mouseup', endHold);
+    zone.addEventListener('pointerup', (e) => {
+      if (e.pointerId !== activePointerId) return;
+      activePointerId = null;
+      endHold();
+    });
+
+    zone.addEventListener('pointercancel', (e) => {
+      if (e.pointerId !== activePointerId) return;
+      activePointerId = null;
+      endHold();
+    });
 
     // ===== particles =====
     const c = document.getElementById('c');
@@ -277,6 +288,8 @@
   </script>
 </body>
 </html>
+
+
 
 
 

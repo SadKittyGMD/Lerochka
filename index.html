@@ -23,18 +23,27 @@
       text-align: center;
     }
 
-    /* Heart */
+    /* Heart shell (rotation + base beat lives here) */
     .heart{
-      position: relative;
       width: 120px;
       height: 110px;
       transform: rotate(-45deg);
-      background: #ff4d6d;
       animation: beat 1.2s ease-in-out infinite;
+      will-change: transform;
+      display: grid;
+      place-items: center;
+    }
+
+    /* Heart actual shape lives here */
+    .heart-inner{
+      position: relative;
+      width: 120px;
+      height: 110px;
+      background: #ff4d6d;
       will-change: transform, box-shadow;
     }
-    .heart::before,
-    .heart::after{
+    .heart-inner::before,
+    .heart-inner::after{
       content: "";
       position: absolute;
       width: 120px;
@@ -42,31 +51,22 @@
       background: #ff4d6d;
       border-radius: 50%;
     }
-    .heart::before{ top: -60px; left: 0; }
-    .heart::after { left: 60px; top: 0; }
+    .heart-inner::before{ top: -60px; left: 0; }
+    .heart-inner::after { left: 60px; top: 0; }
 
-    /* base beat */
     @keyframes beat{
       0%, 100% { transform: rotate(-45deg) scale(1); }
       50%      { transform: rotate(-45deg) scale(1.08); }
     }
 
-    /* tap pulse */
-    .heart.pulse { animation: tapBeat 0.35s ease-out; }
-
-    @keyframes tapBeat {
-      0% {
-        transform: rotate(-45deg) scale(1);
-        box-shadow: 0 0 0 rgba(255, 77, 109, 0.0);
-      }
-      50% {
-        transform: rotate(-45deg) scale(1.25);
-        box-shadow: 0 0 40px rgba(255, 77, 109, 0.8);
-      }
-      100% {
-        transform: rotate(-45deg) scale(1);
-        box-shadow: 0 0 0 rgba(255, 77, 109, 0.0);
-      }
+    /* tap pulse (only on inner, so it doesn't fight with beat) */
+    .heart-inner.pulse{
+      animation: tapBeat 0.35s ease-out;
+    }
+    @keyframes tapBeat{
+      0%   { transform: scale(1);    box-shadow: 0 0 0 rgba(255,77,109,0); }
+      50%  { transform: scale(1.18); box-shadow: 0 0 45px rgba(255,77,109,.85); }
+      100% { transform: scale(1);    box-shadow: 0 0 0 rgba(255,77,109,0); }
     }
 
     .hint{
@@ -75,7 +75,6 @@
       opacity: .78;
       letter-spacing: .2px;
     }
-
     .text{
       margin-top: 14px;
       font-size: 18px;
@@ -117,7 +116,6 @@
       50%{ transform: scale(1.2); opacity: 1; }
     }
 
-    /* subtle particles */
     canvas{ position: fixed; inset: 0; pointer-events: none; opacity: .55; }
   </style>
 </head>
@@ -126,7 +124,9 @@
 
   <div class="wrap" id="tapZone">
     <div>
-      <div class="heart" id="heart" aria-label="сердце"></div>
+      <div class="heart" id="heart" aria-label="сердце">
+        <div class="heart-inner" id="heartInner"></div>
+      </div>
 
       <div class="hint">Коснись экрана и подержи…</div>
 
@@ -142,8 +142,8 @@
   </div>
 
   <script>
-    // ===== Heart beat control =====
-    const heart = document.getElementById('heart');
+    const heart = document.getElementById('heart');          // base beat here
+    const heartInner = document.getElementById('heartInner'); // tap pulse here
     const zone  = document.getElementById('tapZone');
     const msg   = document.getElementById('msg');
     const bpmLabel = document.getElementById('bpmLabel');
@@ -157,16 +157,15 @@
     function bpmToMs(bpmVal){
       return Math.max(280, Math.min(2000, Math.round(60000 / bpmVal)));
     }
-
     function apply(){
-      heart.style.animationDuration = bpmToMs(bpm) + "ms";
+      heart.style.animationDuration = bpmToMs(bpm) + "ms"; // влияет только на beat
       bpmLabel.textContent = "bpm: " + Math.round(bpm);
     }
 
     function pulseOnce(){
-      heart.classList.remove("pulse");
-      void heart.offsetWidth; // перезапуск анимации
-      heart.classList.add("pulse");
+      heartInner.classList.remove('pulse');
+      void heartInner.offsetWidth;
+      heartInner.classList.add('pulse');
     }
 
     function startHold(){
@@ -176,13 +175,11 @@
         revealTimer = setTimeout(() => msg.classList.add('show'), 550);
       }
     }
-
     function endHold(){
       targetBpm = BASE_BPM;
       clearTimeout(revealTimer);
     }
 
-    // плавно приближаем bpm к target
     function tick(){
       bpm += (targetBpm - bpm) * 0.08;
       apply();
@@ -190,7 +187,6 @@
     }
     apply(); tick();
 
-    // touch + mouse (тап-пульс + удержание)
     zone.addEventListener('touchstart', (e) => {
       e.preventDefault();
       pulseOnce();
@@ -204,10 +200,9 @@
       pulseOnce();
       startHold();
     });
-
     window.addEventListener('mouseup', endHold);
 
-    // ===== Background particles (light) =====
+    // ===== particles =====
     const c = document.getElementById('c');
     const ctx = c.getContext('2d');
     let w,h,parts;
@@ -244,6 +239,8 @@
   </script>
 </body>
 </html>
+
+
 
 
 

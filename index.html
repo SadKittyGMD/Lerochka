@@ -59,13 +59,13 @@
       50%      { transform: rotate(-45deg) scale(1.08); }
     }
 
-    /* tap pulse (only on inner, so it doesn't fight with beat) */
+    /* pulse glow on each beat (triggered by JS repeatedly while holding) */
     .heart-inner.pulse{
-      animation: tapBeat 0.35s ease-out;
+      animation: tapBeat 0.28s ease-out;
     }
     @keyframes tapBeat{
       0%   { transform: scale(1);    box-shadow: 0 0 0 rgba(255,77,109,0); }
-      50%  { transform: scale(1.18); box-shadow: 0 0 45px rgba(255,77,109,.85); }
+      55%  { transform: scale(1.16); box-shadow: 0 0 46px rgba(255,77,109,.85); }
       100% { transform: scale(1);    box-shadow: 0 0 0 rgba(255,77,109,0); }
     }
 
@@ -142,64 +142,101 @@
   </div>
 
   <script>
-    const heart = document.getElementById('heart');          // base beat here
-    const heartInner = document.getElementById('heartInner'); // tap pulse here
+    const heart = document.getElementById('heart');            // beat speed
+    const heartInner = document.getElementById('heartInner');  // glow pulse
     const zone  = document.getElementById('tapZone');
     const msg   = document.getElementById('msg');
     const bpmLabel = document.getElementById('bpmLabel');
 
     const BASE_BPM = 72;
     const MAX_BPM  = 160;
+
+    // "feel" tuning
+    const RISE_SPEED = 0.018;   // медленнее растёт
+    const FALL_SPEED = 0.030;   // быстрее падает
+    const MAX_STEP_PER_FRAME = 1.8; // ограничение скачка bpm за кадр
+
     let targetBpm = BASE_BPM;
     let bpm = BASE_BPM;
     let revealTimer = null;
 
+    let holding = false;
+    let beatTimer = null;       // отвечает за повторный glow во время удержания
+
     function bpmToMs(bpmVal){
       return Math.max(280, Math.min(2000, Math.round(60000 / bpmVal)));
     }
+
     function apply(){
-      heart.style.animationDuration = bpmToMs(bpm) + "ms"; // влияет только на beat
+      heart.style.animationDuration = bpmToMs(bpm) + "ms";
       bpmLabel.textContent = "bpm: " + Math.round(bpm);
     }
 
     function pulseOnce(){
       heartInner.classList.remove('pulse');
-      void heartInner.offsetWidth;
+      void heartInner.offsetWidth; // restart animation
       heartInner.classList.add('pulse');
     }
 
+    function scheduleNextPulse(){
+      clearTimeout(beatTimer);
+      if (!holding) return;
+
+      // пусть glow случается чуть-чуть раньше середины "удара", чтобы выглядело живее
+      const interval = bpmToMs(bpm) * 0.92;
+
+      beatTimer = setTimeout(() => {
+        pulseOnce();
+        scheduleNextPulse();
+      }, interval);
+    }
+
     function startHold(){
+      if (holding) return;
+      holding = true;
+
       targetBpm = MAX_BPM;
+
       if (!msg.classList.contains('show')) {
         clearTimeout(revealTimer);
         revealTimer = setTimeout(() => msg.classList.add('show'), 550);
       }
+
+      pulseOnce();          // сразу "удар"
+      scheduleNextPulse();  // и дальше бьётся пока держим
     }
+
     function endHold(){
+      holding = false;
       targetBpm = BASE_BPM;
+
       clearTimeout(revealTimer);
+      clearTimeout(beatTimer);
+      beatTimer = null;
     }
 
     function tick(){
-      bpm += (targetBpm - bpm) * 0.08;
+      const diff = targetBpm - bpm;
+      const speed = diff > 0 ? RISE_SPEED : FALL_SPEED;
+
+      // экспоненциальное приближение + лимит шага (чтобы не дёргалось)
+      let delta = diff * speed;
+      delta = Math.max(-MAX_STEP_PER_FRAME, Math.min(MAX_STEP_PER_FRAME, delta));
+
+      bpm += delta;
       apply();
       requestAnimationFrame(tick);
     }
-    apply(); tick();
 
-    zone.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      pulseOnce();
-      startHold();
-    }, {passive:false});
+    apply();
+    tick();
 
+    // Touch + mouse
+    zone.addEventListener('touchstart', (e) => { e.preventDefault(); startHold(); }, {passive:false});
     zone.addEventListener('touchend', endHold);
     zone.addEventListener('touchcancel', endHold);
 
-    zone.addEventListener('mousedown', () => {
-      pulseOnce();
-      startHold();
-    });
+    zone.addEventListener('mousedown', startHold);
     window.addEventListener('mouseup', endHold);
 
     // ===== particles =====
@@ -208,13 +245,14 @@
     let w,h,parts;
 
     function resize(){
-      w = c.width = window.innerWidth * devicePixelRatio;
-      h = c.height = window.innerHeight * devicePixelRatio;
+      const dpr = window.devicePixelRatio || 1;
+      w = c.width = Math.floor(window.innerWidth * dpr);
+      h = c.height = Math.floor(window.innerHeight * dpr);
       parts = Array.from({length: 70}, () => ({
         x: Math.random()*w, y: Math.random()*h,
-        r: (Math.random()*2.2 + 0.6) * devicePixelRatio,
-        vx: (Math.random()*0.35 + 0.05) * devicePixelRatio,
-        vy: (Math.random()*0.25 + 0.02) * devicePixelRatio,
+        r: (Math.random()*2.2 + 0.6) * dpr,
+        vx: (Math.random()*0.35 + 0.05) * dpr,
+        vy: (Math.random()*0.25 + 0.02) * dpr,
         a: Math.random()*0.5 + 0.15
       }));
     }
@@ -239,6 +277,8 @@
   </script>
 </body>
 </html>
+
+
 
 
 
